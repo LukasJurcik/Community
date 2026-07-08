@@ -6,7 +6,7 @@ Lukas is a designer first, not a developer. He has a basic understanding of Java
 
 - Code runs as custom JavaScript inside **Webflow** sites
 - Animations are done with **GSAP** (GreenSock)
-- The live dev setup uses **fxtun** to tunnel a local server (port 5500) to `https://astralis.fxtun.dev`
+- The live dev setup uses **fxtun** to tunnel a local server (port 5500) to `https://community.fxtun.dev`
 - Production code is served from **jsDelivr** via the GitHub repo
 
 ## Code Style
@@ -30,6 +30,15 @@ Lukas is a designer first, not a developer. He has a basic understanding of Java
 - Never select elements by auto-generated Webflow classes (e.g. `.w-nav`, `.w-embed`)
 - If interacting with Webflow CMS list items, wait for the DOM to be ready before querying
 - Avoid touching the Webflow navbar, slider, or tab components directly with JS unless you know the Webflow API for those components
+- The custom code loader (that pulls `main.js` from fxtun/jsDelivr) belongs in Webflow's **Footer** custom code slot (before `</body>`), not the **Head** slot. It needs GSAP, ScrollTrigger, and Lenis already loaded first, and Footer placement also avoids blocking page render.
+- Because `main.js` is injected dynamically by that loader, it usually loads *after* `DOMContentLoaded` has already fired — a plain `document.addEventListener('DOMContentLoaded', ...)` at the bottom of an init function will often never run. Use this pattern instead for anything that needs the DOM ready:
+  ```js
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initYourFunction)
+  } else {
+    initYourFunction()
+  }
+  ```
 
 ## What to Avoid
 - Don't add unnecessary error handling for scenarios that can't happen

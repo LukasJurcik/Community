@@ -110,179 +110,230 @@ function refreshScrollTrigger() {
 }
 window.refreshScrollTrigger = refreshScrollTrigger
 
-// ============================================
-// BUNNY HLS BACKGROUND VIDEO PLAYER
-// ============================================
+function initMediaSetup() {
+  const mediaElements = document.querySelectorAll('[data-media-init]')
+  if (!mediaElements.length) return
 
-/**
- * Set up background video players that stream from Bunny via HLS.
- * Handles lazy-loading, play/pause/mute controls, and pausing
- * automatically when a player scrolls out of view (when autoplay is on).
- */
-function initBunnyPlayerBackground() {
-  document.querySelectorAll('[data-bunny-background-init]').forEach((player) => {
-    const src = player.getAttribute('data-player-src')
-    if (!src) return
+  const pauseDelay = 200
+  const viewportOffset = 0.1
+  const isHoverDevice = window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
-    const video = player.querySelector('video')
+  initMediaSetup._cleanup?.forEach(fn => fn())
+  const cleanupFns = []
+  const rootMarginValue = viewportOffset * 100
+
+  mediaElements.forEach(mediaEl => {
+    const video = mediaEl.querySelector('[data-media-video-src]')
     if (!video) return
 
-    try { video.pause() } catch (_) {}
-    try { video.removeAttribute('src'); video.load() } catch (_) {}
+    const mode = mediaEl.dataset.mediaMode || 'autoplay'
+    const touchMode = mediaEl.dataset.mediaTouchMode
+    const resetAttr = mediaEl.dataset.mediaReset
+    const pausedStatusAttr = mediaEl.dataset.mediaOnPause
+    const toggleElements = [...mediaEl.querySelectorAll('[data-media-toggle]')]
 
-    // Attribute helpers
-    function setStatus(s) {
-      if (player.getAttribute('data-player-status') !== s) {
-        player.setAttribute('data-player-status', s)
-      }
-    }
-    function setActivated(v) { player.setAttribute('data-player-activated', v ? 'true' : 'false') }
-    if (!player.hasAttribute('data-player-activated')) setActivated(false)
+    const activeMode = !isHoverDevice ? (touchMode || (mode === 'hover' ? 'autoplay' : mode)) : mode
+    const shouldResetOnPause = resetAttr === 'true' ? true : resetAttr === 'false' ? false : activeMode === 'hover'
+    const pausedStatus = pausedStatusAttr === 'paused' ? 'paused' : 'not-active'
 
-    // Flags
-    const lazyMode = player.getAttribute('data-player-lazy') // "true" | "false" (no meta)
-    const isLazyTrue = lazyMode === 'true'
-    const autoplay = player.getAttribute('data-player-autoplay') === 'true'
-    const initialMuted = player.getAttribute('data-player-muted') === 'true'
+    const clickTargets = toggleElements.length ? toggleElements : [mediaEl]
+    const shouldUseClickToggle = activeMode === 'click' || (activeMode === 'autoplay' && toggleElements.length)
 
-    // Used to suppress 'ready' flicker when user just pressed play in lazy modes
-    let pendingPlay = false
+    let isInView = false
+    let isHovering = false
+    let hasLoaded = false
+    let userPaused = false
+    let userActivated = false
+    let isActivated = false
+    let shouldBePlaying = false
+    let pauseTimer = null
 
-    // Autoplay forces muted + loop; the IntersectionObserver drives play/pause
-    if (autoplay) { video.muted = true; video.loop = true }
-    else { video.muted = initialMuted }
-
-    video.setAttribute('muted', '')
-    video.setAttribute('playsinline', '')
-    video.setAttribute('webkit-playsinline', '')
-    video.playsInline = true
-    if (typeof video.disableRemotePlayback !== 'undefined') video.disableRemotePlayback = true
-    if (autoplay) video.autoplay = false
-
-    const isSafariNative = !!video.canPlayType('application/vnd.apple.mpegurl')
-    const canUseHlsJs = !!(window.Hls && Hls.isSupported()) && !isSafariNative
-
-    // Attach media only once (for actual playback)
-    let isAttached = false
-    let lastPauseBy = '' // 'io' | 'manual' | ''
-
-    function attachMediaOnce() {
-      if (isAttached) return
-      isAttached = true
-
-      if (player._hls) { try { player._hls.destroy() } catch (_) {} player._hls = null }
-
-      if (isSafariNative) {
-        video.preload = isLazyTrue ? 'none' : 'auto'
-        video.src = src
-        video.addEventListener('loadedmetadata', () => {
-          readyIfIdle(player, pendingPlay)
-        }, { once: true })
-      } else if (canUseHlsJs) {
-        const hls = new Hls({ maxBufferLength: 10 })
-        hls.attachMedia(video)
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => { hls.loadSource(src) })
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          readyIfIdle(player, pendingPlay)
-        })
-        player._hls = hls
-      } else {
-        video.src = src
-      }
+    const setStatus = status => {
+      mediaEl.dataset.mediaStatus = status
     }
 
-    // Initialize based on lazy mode
-    if (isLazyTrue) {
-      video.preload = 'none'
-    } else {
-      attachMediaOnce()
+    const clearPauseTimer = () => {
+      clearTimeout(pauseTimer)
     }
 
-    // Toggle play/pause
-    function togglePlay() {
-      if (video.paused || video.ended) {
-        if (isLazyTrue && !isAttached) attachMediaOnce()
-        pendingPlay = true
-        lastPauseBy = ''
-        setStatus('loading')
-        safePlay(video)
-      } else {
-        lastPauseBy = 'manual'
+    const addCleanup = fn => {
+      cleanupFns.push(fn)
+    }
+
+    const on = (target, event, handler) => {
+      target.addEventListener(event, handler)
+      addCleanup(() => target.removeEventListener(event, handler))
+    }
+
+    const playAttempt = () => {
+      video.play().then(() => {
+        if (shouldBePlaying) setStatus('playing')
+      }).catch(() => {})
+    }
+
+    const loadVideo = () => {
+      if (hasLoaded) return
+
+      const src = video.dataset.mediaVideoSrc
+      if (!src) return
+
+      video.muted = true
+      video.playsInline = true
+      video.setAttribute('muted', '')
+      video.setAttribute('playsinline', '')
+      video.setAttribute('webkit-playsinline', '')
+      video.src = src
+      video.load()
+      hasLoaded = true
+    }
+
+    const shouldResume = () => {
+      if (!isInView || document.hidden) return false
+      if (activeMode === 'autoplay') return !userPaused
+      if (activeMode === 'click') return userActivated && !userPaused
+      return isHovering
+    }
+
+    const playVideo = () => {
+      if (!isInView || document.hidden) return
+
+      shouldBePlaying = true
+      clearPauseTimer()
+      loadVideo()
+      setStatus(video.readyState < 3 ? 'loading' : 'playing')
+      playAttempt()
+    }
+
+    const pauseVideo = (delay = 0, reset = false) => {
+      shouldBePlaying = false
+      clearPauseTimer()
+
+      pauseTimer = setTimeout(() => {
         video.pause()
+        if (reset) video.currentTime = 0
+      }, delay)
+    }
+
+    const handleHoverIn = () => {
+      if (!isInView || document.hidden) return
+
+      isHovering = true
+      clearPauseTimer()
+
+      if (!video.paused) {
+        shouldBePlaying = true
+        setStatus('playing')
+        return
+      }
+
+      playVideo()
+    }
+
+    const handleHoverOut = () => {
+      if (!isInView) return
+
+      isHovering = false
+      setStatus(pausedStatus)
+      pauseVideo(pauseDelay, shouldResetOnPause)
+    }
+
+    const handleClick = () => {
+      if (!isInView || document.hidden) return
+
+      clearPauseTimer()
+
+      if (video.paused) {
+        userActivated = true
+        userPaused = false
+        playVideo()
+      } else {
+        userActivated = true
+        userPaused = true
+        setStatus(pausedStatus)
+        pauseVideo(pauseDelay, shouldResetOnPause)
       }
     }
 
-    // Toggle mute
-    function toggleMute() {
-      video.muted = !video.muted
-      player.setAttribute('data-player-muted', video.muted ? 'true' : 'false')
+    const handleViewport = entries => {
+      entries.forEach(entry => {
+        if (entry.target !== mediaEl) return
+
+        if (!isActivated && entry.isIntersecting) {
+          isActivated = true
+
+          if (shouldUseClickToggle) {
+            clickTargets.forEach(toggleEl => on(toggleEl, 'click', handleClick))
+          }
+
+          if (activeMode === 'hover') {
+            on(mediaEl, 'mouseenter', handleHoverIn)
+            on(mediaEl, 'mouseleave', handleHoverOut)
+          }
+        }
+
+        isInView = entry.isIntersecting
+
+        if (isInView) {
+          if (shouldResume()) playVideo()
+        } else {
+          isHovering = false
+
+          if (!video.paused || shouldBePlaying) {
+            setStatus('paused')
+            pauseVideo(0, false)
+          }
+        }
+      })
     }
 
-    // Controls (delegated)
-    player.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-player-control]')
-      if (!btn || !player.contains(btn)) return
-      const type = btn.getAttribute('data-player-control')
-      if (type === 'play' || type === 'pause' || type === 'playpause') togglePlay()
-      else if (type === 'mute') toggleMute()
+    const handlePageVisibilityChange = () => {
+      if (document.hidden) {
+        if (!video.paused || shouldBePlaying) {
+          setStatus('paused')
+          pauseVideo(0, false)
+        }
+        return
+      }
+      if (shouldResume()) playVideo()
+    }
+
+    mediaEl.dataset.mediaStatus = 'not-active'
+
+    const observer = new IntersectionObserver(handleViewport, {
+      rootMargin: `${rootMarginValue}% 0px ${rootMarginValue}% 0px`,
+      threshold: 0
     })
 
-    // Media event wiring
-    video.addEventListener('play', () => { setActivated(true); setStatus('playing') })
-    video.addEventListener('playing', () => { pendingPlay = false; setStatus('playing') })
-    video.addEventListener('pause', () => { pendingPlay = false; setStatus('paused') })
-    video.addEventListener('waiting', () => { setStatus('loading') })
-    video.addEventListener('canplay', () => { readyIfIdle(player, pendingPlay) })
-    video.addEventListener('ended', () => { pendingPlay = false; setStatus('paused'); setActivated(false) })
+    observer.observe(mediaEl)
 
-    // In-view auto play/pause (only when autoplay is true)
-    if (autoplay) {
-      if (player._io) { try { player._io.disconnect() } catch (_) {} }
-      const io = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          const inView = entry.isIntersecting && entry.intersectionRatio > 0
-          if (inView) {
-            if (isLazyTrue && !isAttached) attachMediaOnce()
-            if ((lastPauseBy === 'io') || (video.paused && lastPauseBy !== 'manual')) {
-              setStatus('loading')
-              if (video.paused) togglePlay()
-              lastPauseBy = ''
-            }
-          } else {
-            if (!video.paused && !video.ended) {
-              lastPauseBy = 'io'
-              video.pause()
-            }
-          }
-        })
-      }, { threshold: 0.1 })
-      io.observe(player)
-      player._io = io
-    }
+    on(video, 'playing', () => { if (shouldBePlaying) setStatus('playing') })
+    on(video, 'waiting', () => { if (shouldBePlaying) setStatus('loading') })
+    on(video, 'canplay', () => { if (shouldBePlaying && isInView && !document.hidden) playAttempt() })
+    on(video, 'loadeddata', () => { if (shouldBePlaying && isInView && !document.hidden) playAttempt() })
+    on(video, 'ended', () => {
+      if (!shouldBePlaying || !isInView || document.hidden) return
+      video.currentTime = 0
+      playAttempt()
+    })
+
+    on(document, 'visibilitychange', handlePageVisibilityChange)
+
+    addCleanup(() => observer.disconnect())
+    addCleanup(() => {
+      clearPauseTimer()
+      shouldBePlaying = false
+      video.pause()
+    })
   })
 
-  // Helper: ready status guard — only flip to "ready" if nothing else has claimed the state
-  function readyIfIdle(player, pendingPlay) {
-    if (!pendingPlay &&
-        player.getAttribute('data-player-activated') !== 'true' &&
-        player.getAttribute('data-player-status') === 'idle') {
-      player.setAttribute('data-player-status', 'ready')
-    }
-  }
-
-  // Helper: safe programmatic play (swallows the AbortError some browsers throw)
-  function safePlay(video) {
-    const p = video.play()
-    if (p && typeof p.then === 'function') p.catch(() => {})
-  }
+  initMediaSetup._cleanup = cleanupFns
 }
-window.initBunnyPlayerBackground = initBunnyPlayerBackground
 
-// main.js loads asynchronously (via the fxtun/jsDelivr loader script), so
-// DOMContentLoaded has often already fired by the time this file runs —
-// only wait for it if the DOM genuinely isn't ready yet.
+// Initialize Cover Media Setup (Autoplay, Click, Hover)
+// main.js loads asynchronously via the fxtun/jsDelivr loader, so DOMContentLoaded
+// has often already fired by the time this runs — only wait for it if needed
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initBunnyPlayerBackground)
+  document.addEventListener('DOMContentLoaded', initMediaSetup)
 } else {
-  initBunnyPlayerBackground()
+  initMediaSetup()
 }
