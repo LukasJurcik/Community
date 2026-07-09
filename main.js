@@ -91,6 +91,10 @@ if (document.documentElement.classList.contains('stop-scroll')) {
   window.lenis.stop()
 }
 
+// Always start at the top on load/refresh, even if the browser tried
+// to restore a previous scroll position
+window.lenis.scrollTo(0, { immediate: true })
+
 // Wire Lenis into GSAP's ticker + ScrollTrigger (defined above)
 installLenisScrollTriggerBridge()
 
@@ -336,4 +340,27 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initMediaSetup)
 } else {
   initMediaSetup()
+}
+
+// ============================================
+// COPY TO CLIPBOARD
+// ============================================
+
+function initCopyToClipboard() {
+  document.querySelectorAll('[data-text="copy"]').forEach(el => {
+    el.addEventListener('click', () => {
+      // textContent pulls only text nodes, skipping SVG/other markup
+      const text = el.textContent.trim().replace(/\s+/g, ' ')
+
+      navigator.clipboard.writeText(text)
+        .then(() => console.log('Copied:', text))
+        .catch(err => console.error('Copy failed:', err))
+    })
+  })
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCopyToClipboard)
+} else {
+  initCopyToClipboard()
 }
