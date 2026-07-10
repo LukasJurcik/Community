@@ -364,3 +364,46 @@ if (document.readyState === 'loading') {
 } else {
   initCopyToClipboard()
 }
+
+// ============================================
+// COLOR THEME SCROLL ANIMATIONS
+// ============================================
+
+function initThemeScrollAnimations() {
+  const sections = document.querySelectorAll('[data-animate-theme-to]')
+
+  sections.forEach((el, index) => {
+    const theme = el.dataset.animateThemeTo
+    // since sections sit back-to-back with no gap, scrolling back up out of
+    // this section means you're back in the one right before it
+    const previousTheme = index > 0 ? sections[index - 1].dataset.animateThemeTo : null
+
+    ScrollTrigger.create({
+      trigger: el,
+      start: 'top 80%', // fires once 20% of the section has scrolled into view
+      onEnter: () => gsap.to('body', { ...window.colorThemes.getTheme(theme) }),
+      onLeaveBack: () => {
+        if (previousTheme) gsap.to('body', { ...window.colorThemes.getTheme(previousTheme) })
+      }
+    })
+  })
+}
+
+// main.js loads asynchronously, so the theme-collector script's 'colorThemesReady'
+// event (fired on the page's DOMContentLoaded) has often already happened by the
+// time we get here — if themes are already populated, just run immediately
+if (window.colorThemes?.themes && Object.keys(window.colorThemes.themes).length) {
+  initThemeScrollAnimations()
+} else {
+  document.addEventListener('colorThemesReady', initThemeScrollAnimations)
+}
+
+// Videos/images inside the page can still be loading when the triggers above
+// are first measured, which shifts section positions afterward and throws off
+// the trigger zones (most noticeable scrolling back up through stale ones).
+// Re-measuring once everything has fully loaded keeps them accurate.
+if (document.readyState === 'complete') {
+  refreshScrollTrigger()
+} else {
+  window.addEventListener('load', refreshScrollTrigger)
+}
