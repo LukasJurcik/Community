@@ -114,12 +114,16 @@ function refreshScrollTrigger() {
 }
 window.refreshScrollTrigger = refreshScrollTrigger
 
+// ============================================
+// Bunny (bunny.net) custom video setup — autoplay/click/hover handling for [data-media-init] elements
+// ============================================
+
 function initMediaSetup() {
   const mediaElements = document.querySelectorAll('[data-media-init]')
   if (!mediaElements.length) return
 
   const pauseDelay = 200
-  const viewportOffset = 0.1
+  const viewportOffset = 0.75
   const isHoverDevice = window.matchMedia('(hover: hover) and (pointer: fine)').matches
 
   initMediaSetup._cleanup?.forEach(fn => fn())
@@ -183,9 +187,11 @@ function initMediaSetup() {
 
       video.muted = true
       video.playsInline = true
+      video.preload = 'auto'
       video.setAttribute('muted', '')
       video.setAttribute('playsinline', '')
       video.setAttribute('webkit-playsinline', '')
+      video.setAttribute('fetchpriority', 'high')
       video.src = src
       video.load()
       hasLoaded = true
