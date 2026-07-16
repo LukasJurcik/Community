@@ -407,3 +407,65 @@ if (document.readyState === 'complete') {
 } else {
   window.addEventListener('load', refreshScrollTrigger)
 }
+
+// ============================================
+// SIDE PANEL MODAL
+// ============================================
+
+function initSidePanel() {
+  const panel = document.querySelector('[side-panel-wrapper="true"]')
+  if (!panel) return
+
+  const overlay = document.querySelector('[side-panel-overlay="true"]')
+  const panelBox = document.querySelector('[side-panel-box="true"]')
+  const panelScroll = document.querySelector('[side-panel-scroll="true"]')
+  const openTriggers = document.querySelectorAll('[side-panel="true"]')
+  const closeTriggers = document.querySelectorAll('[side-panel-close="true"]')
+
+  gsap.set(panel, { autoAlpha: 1 })
+  if (panelBox) gsap.set(panelBox, { xPercent: 105 })
+
+  // fade the overlay's tint, not its opacity, so the panel box nested inside it isn't affected
+  let overlayVisibleColor = null
+  let overlayHiddenColor = null
+  if (overlay) {
+    const [r, g, b, a = 1] = getComputedStyle(overlay).backgroundColor.match(/[\d.]+/g)
+    overlayVisibleColor = `rgba(${r}, ${g}, ${b}, ${a})`
+    overlayHiddenColor = `rgba(${r}, ${g}, ${b}, 0)`
+    gsap.set(overlay, { backgroundColor: overlayHiddenColor })
+  }
+
+  const openPanel = () => {
+    window.lenis?.stop()
+    gsap.set(panel, { display: 'block' })
+    if (panelScroll) panelScroll.scrollTop = 0
+
+    const tl = gsap.timeline()
+    if (overlay) tl.to(overlay, { backgroundColor: overlayVisibleColor, duration: 0.5, ease: 'power1.out' }, 0)
+    if (panelBox) tl.to(panelBox, { xPercent: 0, duration: 0.4, ease: 'power2.out' }, 0)
+  }
+
+  const closePanel = () => {
+    window.lenis?.start()
+
+    const tl = gsap.timeline({ onComplete: () => gsap.set(panel, { display: 'none' }) })
+    if (overlay) tl.to(overlay, { backgroundColor: overlayHiddenColor, duration: 0.5, ease: 'power1.out' }, 0)
+    if (panelBox) tl.to(panelBox, { xPercent: 105, duration: 0.4, ease: 'power2.out' }, 0)
+  }
+
+  openTriggers.forEach(trigger => trigger.addEventListener('click', openPanel))
+
+  // only close if the click landed directly on the trigger, not something bubbling up from inside it
+  closeTriggers.forEach(trigger => {
+    trigger.addEventListener('click', e => {
+      if (e.target !== trigger) return
+      closePanel()
+    })
+  })
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initSidePanel)
+} else {
+  initSidePanel()
+}
