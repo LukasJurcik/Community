@@ -475,3 +475,26 @@ if (document.readyState === 'loading') {
 } else {
   initSidePanel()
 }
+
+// ============================================
+// FLOATING NAV ON SCROLL
+// ============================================
+
+function initFloatingNav() {
+  const navBar = document.querySelector('[data-nav-bar]')
+  const navLogo = document.querySelector('[data-nav-logo]')
+  if (!navBar) return
+
+  ScrollTrigger.create({
+    trigger: document.body,
+    start: 'top -24', // fires once the page has scrolled 24px down
+    end: 99999,
+    toggleClass: { targets: [navBar, navLogo].filter(Boolean), className: 'nav-scrolled' }
+  })
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initFloatingNav)
+} else {
+  initFloatingNav()
+}
