@@ -480,6 +480,74 @@ if (document.readyState === 'loading') {
 // FLOATING NAV ON SCROLL
 // ============================================
 
+function initMobileNav() {
+  const toggle = document.querySelector('[mobile-nav="true"]')
+  const menu = document.querySelector('[mobile-links="true"]')
+  if (!toggle || !menu) return
+
+  // Webflow's padding has to collapse to 0 alongside height, or a
+  // padding-sized strip lingers until the display:none snap at the end
+  const basePadding = {
+    top: getComputedStyle(menu).paddingTop,
+    bottom: getComputedStyle(menu).paddingBottom
+  }
+
+  let isOpen = false
+
+  const openMenu = () => {
+    isOpen = true
+    // padding snaps to its real value instantly, before the height is measured,
+    // so the measurement below reflects the true final size
+    gsap.set(menu, { display: 'flex', height: 'auto', paddingTop: basePadding.top, paddingBottom: basePadding.bottom })
+    const targetHeight = menu.offsetHeight
+    // handing GSAP a real number instead of the 'auto' keyword avoids the one-frame
+    // flash of the fully-open (tall, rounded) shape that 'auto' resolution causes
+    gsap.fromTo(menu, { height: 0 }, { height: targetHeight, duration: 0.4, ease: 'power2.out' })
+  }
+
+  const closeMenu = () => {
+    isOpen = false
+    gsap.to(menu, {
+      height: 0,
+      paddingTop: 0,
+      paddingBottom: 0,
+      duration: 0.4,
+      ease: 'power2.out',
+      onComplete: () => gsap.set(menu, { display: 'none' })
+    })
+  }
+
+  toggle.addEventListener('click', () => {
+    isOpen ? closeMenu() : openMenu()
+  })
+
+  // clicking a link closes the menu too — guarded by isOpen so a desktop
+  // click (where the menu is never "open") never touches this shared element
+  menu.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', () => {
+      if (isOpen) closeMenu()
+    })
+  })
+
+  // closes the menu as soon as the page starts scrolling again
+  window.lenis?.on('scroll', () => {
+    if (isOpen) closeMenu()
+  })
+
+  // only collapse/expand by height below the tablet breakpoint — on desktop
+  // the links stay a plain row and the hamburger is hidden anyway
+  gsap.matchMedia().add('(max-width: 991px)', () => {
+    gsap.set(menu, { height: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' })
+    return () => gsap.set(menu, { clearProps: 'height,paddingTop,paddingBottom,overflow,display' })
+  })
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMobileNav)
+} else {
+  initMobileNav()
+}
+
 function initFloatingNav() {
   const navBar = document.querySelector('[data-nav-bar]')
   const navLogo = document.querySelector('[data-nav-logo]')
