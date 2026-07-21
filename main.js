@@ -415,23 +415,29 @@ if (document.readyState === 'complete') {
 }
 
 // ============================================
-// SIDE PANEL MODAL
+// PANEL MODALS (side panel + contact panel)
 // ============================================
 
-function initSidePanel() {
-  const panel = document.querySelector('[side-panel-wrapper="true"]')
+// Shared by both panels below. Each instance finds its own overlay/close-button
+// by searching inside its own wrapper (via .closest), so the side panel and the
+// contact panel can share the same data-overlay / data-modal-wrapper / data-close-button
+// attributes and still work independently on the same page.
+function initPanel({ boxSelector, openSelector, hiddenState }) {
+  const box = document.querySelector(boxSelector)
+  if (!box) return
+
+  const panel = box.closest('[data-modal-wrapper="true"]')
   if (!panel) return
 
-  const overlay = document.querySelector('[side-panel-overlay="true"]')
-  const panelBox = document.querySelector('[side-panel-box="true"]')
-  const panelScroll = document.querySelector('[side-panel-scroll="true"]')
-  const openTriggers = document.querySelectorAll('[side-panel="true"]')
-  const closeTriggers = document.querySelectorAll('[side-panel-close="true"]')
+  const overlay = panel.querySelector('[data-overlay="true"]')
+  const panelScroll = panel.querySelector('[side-panel-scroll="true"]')
+  const openTriggers = document.querySelectorAll(openSelector)
+  const closeTriggers = panel.querySelectorAll('[data-close-button="true"]')
 
   gsap.set(panel, { autoAlpha: 1 })
-  if (panelBox) gsap.set(panelBox, { xPercent: 105 })
+  gsap.set(box, hiddenState)
 
-  // fade the overlay's tint, not its opacity, so the panel box nested inside it isn't affected
+  // fade the overlay's tint, not its opacity, so the box nested inside it isn't affected
   let overlayVisibleColor = null
   let overlayHiddenColor = null
   if (overlay) {
@@ -448,7 +454,7 @@ function initSidePanel() {
 
     const tl = gsap.timeline()
     if (overlay) tl.to(overlay, { backgroundColor: overlayVisibleColor, duration: 0.5, ease: 'power1.out' }, 0)
-    if (panelBox) tl.to(panelBox, { xPercent: 0, duration: 0.4, ease: 'power2.out' }, 0)
+    tl.to(box, { xPercent: 0, yPercent: 0, autoAlpha: 1, duration: 0.4, ease: 'power2.out' }, 0)
   }
 
   const closePanel = () => {
@@ -456,7 +462,7 @@ function initSidePanel() {
 
     const tl = gsap.timeline({ onComplete: () => gsap.set(panel, { display: 'none' }) })
     if (overlay) tl.to(overlay, { backgroundColor: overlayHiddenColor, duration: 0.5, ease: 'power1.out' }, 0)
-    if (panelBox) tl.to(panelBox, { xPercent: 105, duration: 0.4, ease: 'power2.out' }, 0)
+    tl.to(box, { ...hiddenState, duration: 0.4, ease: 'power2.out' }, 0)
   }
 
   openTriggers.forEach(trigger => trigger.addEventListener('click', openPanel))
@@ -470,10 +476,26 @@ function initSidePanel() {
   })
 }
 
+function initPanels() {
+  // slides in from the right, like before
+  initPanel({
+    boxSelector: '[side-panel-box="true"]',
+    openSelector: '[side-panel="true"]',
+    hiddenState: { xPercent: 105 }
+  })
+
+  // fades in while sliding up into place; hidden state is faded out and shifted down
+  initPanel({
+    boxSelector: '[contact-panel="true"]',
+    openSelector: '[contact-panel-trigger="true"]',
+    hiddenState: { yPercent: 20, autoAlpha: 0 }
+  })
+}
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initSidePanel)
+  document.addEventListener('DOMContentLoaded', initPanels)
 } else {
-  initSidePanel()
+  initPanels()
 }
 
 // ============================================
