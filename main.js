@@ -354,6 +354,13 @@ if (document.readyState === 'loading') {
 
 function initCopyToClipboard() {
   document.querySelectorAll('[data-text="copy"]').forEach(el => {
+    // scoped to this element's own CMS item, so clicking one card's copy button
+    // doesn't show every other card's toast message too
+    const wrapper = el.closest('[data-copy-item="true"]')
+    const message = wrapper?.querySelector('[data-copy-message]')
+
+    if (message) gsap.set(message, { display: 'none', opacity: 0, y: '0.5rem' })
+
     el.addEventListener('click', () => {
       // textContent pulls only text nodes, skipping SVG/other markup
       const text = el.textContent.trim().replace(/\s+/g, ' ')
@@ -361,6 +368,16 @@ function initCopyToClipboard() {
       navigator.clipboard.writeText(text)
         .then(() => console.log('Copied:', text))
         .catch(err => console.error('Copy failed:', err))
+
+      if (!message) return
+
+      gsap.killTweensOf(message)
+      gsap.timeline()
+        .set(message, { display: 'block' })
+        .to(message, { opacity: 1, y: 0, duration: 0.3, ease: 'power2.out' })
+        // '+=0.5' tells GSAP to wait 0.5s after the fade-in finishes before starting the fade-out — that's the "hold" time
+        .to(message, { opacity: 0, y: '0.5rem', duration: 0.3, ease: 'power2.in' }, '+=0.5')
+        .set(message, { display: 'none' })
     })
   })
 }
