@@ -587,6 +587,59 @@ if (document.readyState === 'loading') {
   initMobileNav()
 }
 
+// ============================================
+// TEAM GRID COLUMN STAGGER (scroll-linked)
+// ============================================
+
+function initTeamGridStagger() {
+  const grid = document.querySelector('[data-grid="team"]')
+  if (!grid) return
+
+  const items = [...grid.querySelectorAll('[data-grid-item]')]
+  if (!items.length) return
+
+  // in a 4-column grid with normal row-by-row flow, DOM position tells us
+  // which column an item sits in — odd positions (1, 3, 5, 7...) are columns
+  // 1 and 3, even positions (2, 4, 6, 8...) are columns 2 and 4
+  const riseItems = items.filter((_, i) => (i + 1) % 2 === 1) // columns 1 & 3
+  const fallItems = items.filter((_, i) => (i + 1) % 2 === 0) // columns 2 & 4
+
+
+  const offsetAmount = '2vw'
+  const riseOffset = `-${offsetAmount}`
+  const fallOffset = offsetAmount
+
+  // only 4 columns exist above this width — below it the logic doesn't apply
+  gsap.matchMedia().add('(min-width: 992px)', () => {
+    // items move via transform, which doesn't push the grid's own box out
+    gsap.set(grid, { paddingTop: offsetAmount, paddingBottom: offsetAmount })
+
+    const tl = gsap.timeline({
+      scrollTrigger: {
+        trigger: grid,
+        start: 'top bottom',
+        end: 'bottom top', // full overshoot completes across the whole section
+        scrub: 0.75
+      }
+    })
+
+    // position 0 on both so they animate together, not one after the other
+    tl.fromTo(riseItems, { y: riseOffset }, { y: fallOffset, ease: 'none' }, 0)
+    tl.fromTo(fallItems, { y: fallOffset }, { y: riseOffset, ease: 'none' }, 0)
+
+    return () => {
+      gsap.set(items, { clearProps: 'transform' })
+      gsap.set(grid, { clearProps: 'paddingTop,paddingBottom' })
+    }
+  })
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initTeamGridStagger)
+} else {
+  initTeamGridStagger()
+}
+
 function initFloatingNav() {
   const navBar = document.querySelector('[data-nav-bar]')
   const navLogo = document.querySelector('[data-nav-logo]')
